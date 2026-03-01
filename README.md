@@ -1,4 +1,4 @@
-# 🦞 OpenClaw — Personal AI Assistant
+# 🦀 LinklawCN — Personal AI Assistant
 
 <p align="center">
     <picture>
@@ -31,10 +31,6 @@ Works with npm, pnpm, or bun.
 New install? Start here: [Getting started](https://docs.openclaw.ai/start/getting-started)
 
 ## Sponsors
-
-| OpenAI                                                            | Blacksmith                                                                   | Convex                                                                |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| [![OpenAI](docs/assets/sponsors/openai.svg)](https://openai.com/) | [![Blacksmith](docs/assets/sponsors/blacksmith.svg)](https://blacksmith.sh/) | [![Convex](docs/assets/sponsors/convex.svg)](https://www.convex.dev/) |
 
 **Subscriptions (OAuth):**
 
