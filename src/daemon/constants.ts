@@ -1,4 +1,16 @@
 // Default service labels (canonical + legacy compatibility)
+export const GATEWAY_LAUNCH_AGENT_LABEL = "ai.linkclawcn.gateway";
+export const GATEWAY_SYSTEMD_SERVICE_NAME = "linkclawcn-gateway";
+export const GATEWAY_WINDOWS_TASK_NAME = "LinkClawCN Gateway";
+export const GATEWAY_WINDOWS_SERVICE_NAME = "LinkClawCNGateway";
+export const GATEWAY_SERVICE_MARKER = "linkclawcn";
+export const GATEWAY_SERVICE_KIND = "gateway";
+
+export const NODE_LAUNCH_AGENT_LABEL = "ai.linkclawcn.node";
+export const NODE_SYSTEMD_SERVICE_NAME = "linkclawcn-node";
+export const NODE_WINDOWS_TASK_NAME = "LinkClawCN Node";
+export const NODE_SERVICE_MARKER = "linkclawcn";
+export const NODE_SERVICE_KIND = "node";
 export const GATEWAY_LAUNCH_AGENT_LABEL = "ai.openclaw.gateway";
 export const GATEWAY_SYSTEMD_SERVICE_NAME = "openclaw-gateway";
 export const GATEWAY_WINDOWS_TASK_NAME = "OpenClaw Gateway";

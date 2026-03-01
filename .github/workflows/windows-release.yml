@@ -41,7 +41,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build OpenClaw
+      - name: Build LinkClawCN
         run: pnpm build
 
       - name: Download WinSW
@@ -73,8 +73,14 @@ jobs:
           # Copy built files
           Copy-Item -Path "dist/*" -Destination $distDir -Recurse -Force
           
-          # Copy WinSW
-          Copy-Item -Path "third_party/winsw/WinSW-x64.exe" -Destination "$distDir/openclaw-gateway.exe" -Force
+          # Rename to linkclawcn
+          Get-ChildItem $distDir -Filter "openclaw*" | ForEach-Object {
+            $newName = $_.Name -replace 'openclaw', 'linkclawcn'
+            Rename-Item $_.FullName -NewName $newName
+          }
+          
+          # Copy WinSW as linkclawcn-gateway.exe
+          Copy-Item -Path "third_party/winsw/WinSW-x64.exe" -Destination "$distDir/linkclawcn-gateway.exe" -Force
           Copy-Item -Path "third_party/winsw/openclaw-gateway.xml" -Destination $distDir -Force
           Copy-Item -Path "third_party/winsw/LICENSE" -Destination $distDir -Force
           
@@ -83,23 +89,22 @@ jobs:
           
           # Copy icon
           Copy-Item -Path "installer/openclaw.ico" -Destination $distDir -Force
-          Copy-Item -Path "LICENSE" -Destination $distDir -Force
           
           # Create zip archive
-          Compress-Archive -Path "$distDir/*" -DestinationPath "OpenClaw-windows-$version.zip" -Force
+          Compress-Archive -Path "$distDir/*" -DestinationPath "linkclawcn-windows-x64-portable.zip" -Force
           
-          Write-Host "Created: OpenClaw-windows-$version.zip"
+          Write-Host "Created: linkclawcn-windows-x64-portable.zip"
           Get-ChildItem -Path . -Filter "*.zip" | Select-Object Name, Length
 
       - name: Build Inno Setup Installer
         uses: matheusalves/inno-setup-action@v1
         with:
-          appName: OpenClaw
+          appName: LinkClawCN
           appVersion: ${{ github.ref_name }}
-          appPublisher: OpenClaw
-          appPublisherUrl: https://openclaw.ai
-          appSupportUrl: https://github.com/openclaw/openclaw
-          appExeName: openclaw.exe
+          appPublisher: LinkClawCN
+          appPublisherUrl: https://github.com/gzxh-ll/linkclawcn
+          appSupportUrl: https://github.com/gzxh-ll/linkclawcn
+          appExeName: linkclawcn.exe
           outputDir: dist
           installerFile: installer/openclaw.iss
 
@@ -117,8 +122,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         with:
           files: |
-            OpenClaw-windows-*.zip
-            OpenClaw-*-Setup.exe
+            linkclawcn-windows-x64-portable.zip
+            linkclawcn-windows-x64-setup-zh.exe
             sha256.txt
           generate_release_notes: true
           draft: false
@@ -130,7 +135,7 @@ jobs:
         with:
           name: windows-build
           path: |
-            OpenClaw-windows-*.zip
-            OpenClaw-*-Setup.exe
+            linkclawcn-windows-x64-portable.zip
+            linkclawcn-windows-x64-setup-zh.exe
             sha256.txt
           retention-days: 7

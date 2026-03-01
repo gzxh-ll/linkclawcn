@@ -1,12 +1,12 @@
-; OpenClaw Windows Installer Script (Inno Setup)
+; LinkClawCN Windows Installer Script (Inno Setup)
 ; 中文安装界面，支持服务安装/开机自启
 
-#define MyAppName "OpenClaw"
+#define MyAppName "LinkClawCN"
 #define MyAppVersion "2026.2.27"
-#define MyAppPublisher "OpenClaw"
-#define MyAppURL "https://openclaw.ai"
-#define MyAppExeName "openclaw.exe"
-#define MyAppServiceName "OpenClawGateway"
+#define MyAppPublisher "LinkClawCN"
+#define MyAppURL "https://github.com/gzxh-ll/linkclawcn"
+#define MyAppExeName "linkclawcn.exe"
+#define MyAppServiceName "LinkClawCNGateway"
 
 [Setup]
 ; 基础配置
@@ -16,15 +16,15 @@ AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
-AppSupportURL=https://github.com/openclaw/openclaw
-AppUpdatesURL=https://github.com/openclaw/openclaw/releases
+AppSupportURL=https://github.com/gzxh-ll/linkclawcn
+AppUpdatesURL=https://github.com/gzxh-ll/linkclawcn/releases
 AppIcon=openclaw.ico
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 ; 输出配置
 OutputDir=..\dist
-OutputBaseFilename=OpenClaw-{#MyAppVersion}-Setup
+OutputBaseFilename=linkclawcn-windows-x64-setup-zh
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -68,15 +68,13 @@ Name: "service"; Description: "{cm:InstallService}"; GroupDescription: "{cm:Serv
 ; 主程序 (dist 目录)
 Source: "..\dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; WinSW 服务包装器
-Source: "..\third_party\winsw\WinSW-x64.exe"; DestDir: "{app}"; DestName: "openclaw-gateway.exe"; Flags: ignoreversion
+Source: "..\third_party\winsw\WinSW-x64.exe"; DestDir: "{app}"; DestName: "linkclawcn-gateway.exe"; Flags: ignoreversion
 Source: "..\third_party\winsw\openclaw-gateway.xml"; DestDir: "{app}"; Flags: ignoreversion
 ; 许可证文件
 Source: "..\third_party\winsw\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 ; 应用图标
 Source: "openclaw.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\third_party\winsw\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Comment: "{cm:ServiceDescription}"
@@ -93,8 +91,8 @@ Filename: "sc"; Parameters: "stop {#MyAppServiceName}"; Flags: runhidden waitunt
 Filename: "sc"; Parameters: "delete {#MyAppServiceName}"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteService"
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{localappdata}\OpenClaw"
-Type: filesandordirs; Name: "{userappdata}\OpenClaw"
+Type: filesandordirs; Name: "{localappdata}\LinkClawCN"
+Type: filesandordirs; Name: "{userappdata}\LinkClawCN"
 
 [Code]
 var
@@ -105,7 +103,7 @@ var
 procedure InitializeWizard;
 begin
   // 服务选项页面
-  ServicePage := CreateCustomPage(wpSelectTasks, '服务选项', '配置 OpenClaw 服务安装方式');
+  ServicePage := CreateCustomPage(wpSelectTasks, '服务选项', '配置 LinkClawCN 服务安装方式');
   
   ServiceCheckBox := TCheckBox.Create(ServicePage);
   ServiceCheckBox.Parent := ServicePage.Surface;
@@ -135,7 +133,7 @@ begin
     if ServiceCheckBox.Checked then
     begin
       // 安装服务
-      Exec('cmd', '/c ""{app}\openclaw-gateway.exe" install"', 
+      Exec('cmd', '/c ""{app}\linkclawcn-gateway.exe" install"', 
            '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       
       // 启动服务

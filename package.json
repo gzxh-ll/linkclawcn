@@ -11,7 +11,24 @@
   "author": "",
   "repository": {
     "type": "git",
+    {
+  "name": "linkclawcn",
+  "version": "2026.2.27",
+  "description": "LinkClawCN - 多通道 AI 网关与个人助手",
+  "keywords": [],
+  "homepage": "https://github.com/gzxh-ll/linkclawcn#readme",
+  "bugs": {
+    "url": "https://github.com/gzxh-ll/linkclawcn/issues"
+  },
+  "license": "MIT",
+  "author": "",
+  "repository": {
+    "type": "git",
     "url": "git+https://github.com/gzxh-ll/linkclawcn.git"
+  },
+  "bin": {
+    "linkclawcn": "openclaw.mjs"
+  },
   },
   "bin": {
     "linkclawcn": "openclaw.mjs"
