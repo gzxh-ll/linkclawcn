@@ -15,6 +15,10 @@ import {
 	GATEWAY_WINDOWS_SERVICE_NAME,
 	resolveGatewayServiceDescription,
 } from "./constants.js";
+import { resolveGatewayStateDir, resolveWindowsLogDir } from "./paths.js";
+	GATEWAY_WINDOWS_SERVICE_NAME,
+	resolveGatewayServiceDescription,
+} from "./constants.js";
 import { resolveGatewayStateDir } from "./paths.js";
 import type {
 	GatewayServiceCommandConfig,
@@ -34,6 +38,28 @@ const SERVICE_DISPLAY_NAME = "OpenClaw Gateway";
 const SERVICE_DESCRIPTION = "OpenClaw control plane gateway daemon";
 
 /**
+ * Resolve log directory based on service installation type
+ * Uses unified path resolver from paths.ts
+ */
+function resolveLogDirectory(env: Record<string, string | undefined>): string {
+	// Check if running in machine mode (admin privileges)
+	const isMachineMode = checkAdminPrivileges();
+
+	// Use unified resolver from paths.ts
+	const logDir = resolveWindowsLogDir(env, { machineMode: isMachineMode });
+
+	// Ensure log directory exists
+	try {
+		fs.mkdirSync(logDir, { recursive: true });
+	} catch {
+		// Fallback to state dir
+		const fallbackDir = path.join(resolveGatewayStateDir(env), "logs");
+		fs.mkdirSync(fallbackDir, { recursive: true });
+		return fallbackDir;
+	}
+
+	return logDir;
+}
  * Resolve log directory based on service installation type
  */
 function resolveLogDirectory(env: Record<string, string | undefined>): string {

@@ -2,6 +2,61 @@ import path from "node:path";
 import { resolveGatewayProfileSuffix } from "./constants.js";
 
 const windowsAbsolutePath = /^[a-zA-Z]:[\\/]/;
+const windowsUncPath = /^\\/;
+
+// Windows log directory constants
+export const WINDOWS_LOG_DIR_MACHINE = "logs"; // under %PROGRAMDATA%\OpenClaw
+export const WINDOWS_LOG_DIR_USER = "logs"; // under %LOCALAPPDATA%\OpenClaw
+export const WINDOWS_APP_NAME = "OpenClaw";
+
+/**
+ * Resolve Windows log directory based on installation mode
+ *
+ * @param env - Environment variables
+ * @param options.machineMode - If true, use machine-wide directory (requires admin)
+ * @returns Resolved log directory path
+ */
+export function resolveWindowsLogDir(
+  env: Record<string, string | undefined>,
+  options?: { machineMode?: boolean },
+): string {
+  const machineMode = options?.machineMode ?? false;
+
+  let baseDir: string | undefined;
+
+  if (machineMode) {
+    // Machine mode: %PROGRAMDATA%\OpenClaw\logs
+    baseDir = env.PROGRAMDATA || process.env.PROGRAMDATA;
+  } else {
+    // User mode: %LOCALAPPDATA%\OpenClaw\logs
+    baseDir = env.LOCALAPPDATA || process.env.LOCALAPPDATA;
+  }
+
+  // Fallback to state directory if env var not available
+  if (!baseDir) {
+    return path.join(resolveGatewayStateDir(env), "logs");
+  }
+
+  return path.join(baseDir, WINDOWS_APP_NAME, WINDOWS_LOG_DIR_USER);
+}
+
+/**
+ * Check if running with administrator privileges on Windows
+ */
+export function checkIsMachineMode(): boolean {
+  if (process.platform !== "win32") {
+    return false;
+  }
+  try {
+    require("child_process").execSync("net session", { stdio: "ignore", windowsHide: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+import { resolveGatewayProfileSuffix } from "./constants.js";
+
+const windowsAbsolutePath = /^[a-zA-Z]:[\\/]/;
 const windowsUncPath = /^\\\\/;
 
 export function resolveHomeDir(env: Record<string, string | undefined>): string {

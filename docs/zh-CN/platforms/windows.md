@@ -154,3 +154,41 @@ openclaw onboard
 ## Windows 配套应用
 
 我们还没有 Windows 配套应用。如果你想让它实现，欢迎贡献。
+
+
+## Windows Service 日志目录
+
+当使用 `openclaw service install` 安装 Windows Service 时，日志目录根据安装模式有所不同：
+
+| 安装模式 | 日志目录 | 说明 |
+|----------|----------|------|
+| 管理员模式 (SCM) | `%PROGRAMDATA%\OpenClaw\logs\` | 需要管理员权限 |
+| 用户模式 (Task Scheduler) | `%LOCALAPPDATA%\OpenClaw\logs\` | 无需管理员权限 |
+
+### 日志文件
+
+- **日志文件名**: `gateway.log`
+- **轮转策略**: 按天轮转，保留 24 小时
+
+### 查看日志
+
+```powershell
+# 管理员模式日志
+Get-Content "%PROGRAMDATA%\OpenClaw\logs\gateway.log"
+
+# 用户模式日志
+Get-Content "%LOCALAPPDATA%\OpenClaw\logs\gateway.log"
+
+# 实时查看日志
+Get-Content "%PROGRAMDATA%\OpenClaw\logs\gateway.log" -Wait -Tail 50
+```
+
+### 强制使用用户模式
+
+如果需要避免管理员权限，可以使用 Task Scheduler 模式：
+
+```powershell
+openclaw service install --mode user
+```
+
+详细说明请参考 [Gateway 服务安装](/cli/gateway)。

@@ -2,235 +2,212 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+// Try to import from daemon paths for Windows unified resolver
+// This import is optional - if it fails, we'll use inline logic
+let resolveWindowsLogDir: ((env: Record<string, string | undefined>, options?: { machineMode?: boolean }) => string) | null = null;
+try {
+	const daemonPaths = await import("../daemon/paths.js");
+	resolveWindowsLogDir = daemonPaths.resolveWindowsLogDir;
+} catch {
+	// daemon/paths not available yet, will use inline logic
+}
+
 export const POSIX_OPENCLAW_TMP_DIR = "/tmp/openclaw";
 const TMP_DIR_ACCESS_MODE = fs.constants.W_OK | fs.constants.X_OK;
 
-type ResolvePreferredOpenClawTmpDirOptions = {
-  accessSync?: (path: string, mode?: number) => void;
-  chmodSync?: (path: string, mode: number) => void;
-  lstatSync?: (path: string) => {
-    isDirectory(): boolean;
-    isSymbolicLink(): boolean;
-    mode?: number;
-    uid?: number;
-  };
-  mkdirSync?: (path: string, opts: { recursive: boolean; mode?: number }) => void;
-  getuid?: () => number | undefined;
-  tmpdir?: () => string;
-  warn?: (message: string) => void;
+export type ResolvePreferredOpenClawTmpDirOptions = {
+	accessSync?: (path: string, mode?: number) => void;
+	chmodSync?: (path: string, mode: number) => void;
+	lstatSync?: (path: string) => {
+		isDirectory(): boolean;
+		isSymbolicLink(): boolean;
+		mode?: number;
+		uid?: number;
+	};
+	mkdirSync?: (path: string, opts: { recursive: boolean; mode?: number }) => void;
+	getuid?: () => number | undefined;
+	tmpdir?: () => string;
+	warn?: (message: string) => void;
 };
 
 type MaybeNodeError = { code?: string };
 
 function isNodeErrorWithCode(err: unknown, code: string): err is MaybeNodeError {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as MaybeNodeError).code === code
-  );
+	return (
+		typeof err === "object" &&
+		err !== null &&
+		"code" in err &&
+		(err as MaybeNodeError).code === code
+	);
 }
 
 export function resolvePreferredOpenClawTmpDir(
-  options: ResolvePreferredOpenClawTmpDirOptions = {},
+	options: ResolvePreferredOpenClawTmpDirOptions = {},
 ): string {
-  // Windows: Use %PROGRAMDATA%\OpenClaw\logs or %LOCALAPPDATA%\OpenClaw\logs
-  if (process.platform === "win32") {
-    const programData = process.env.PROGRAMDATA;
-    const localAppData = process.env.LOCALAPPDATA;
+	// Windows: Use unified path resolver from daemon/paths
+	if (process.platform === "win32") {
+		// Use the imported resolver if available
+		if (resolveWindowsLogDir) {
+			// Default to user mode for logger (non-service context)
+			const logDir = resolveWindowsLogDir(process.env as Record<string, string | undefined>, {
+				machineMode: false,
+			});
+			try {
+				fs.mkdirSync(logDir, { recursive: true });
+				return logDir;
+			} catch {
+				// Fallback to inline logic
+			}
+		}
 
-    // Try ProgramData first (machine-wide, requires admin for service)
-    if (programData) {
-      const openClawDir = path.join(programData, "OpenClaw", "logs");
-      try {
-        fs.mkdirSync(openClawDir, { recursive: true });
-        return openClawDir;
-      } catch {
-        // Fall through to try LocalAppData
-      }
-    }
+		// Inline fallback - use LocalAppData for logger
+		const localAppData = process.env.LOCALAPPDATA;
+		if (localAppData) {
+			const openClawDir = path.join(localAppData, "OpenClaw", "logs");
+			try {
+				fs.mkdirSync(openClawDir, { recursive: true });
+				return openClawDir;
+			} catch {
+				// Fall through to fallback
+			}
+		}
 
-    // Fallback to LocalAppData (per-user, no admin required)
-    if (localAppData) {
-      const openClawDir = path.join(localAppData, "OpenClaw", "logs");
-      try {
-        fs.mkdirSync(openClawDir, { recursive: true });
-        return openClawDir;
-      } catch {
-        // Fall through to fallback
-      }
-    }
+		// Final fallback to temp directory
+		const tempDir = os.tmpdir();
+		return path.join(tempDir, "openclaw");
+	}
 
-    // Final fallback to temp directory
-  }
+	// POSIX systems: use the existing logic
+	const accessSync = options.accessSync ?? fs.accessSync;
+	const chmodSync = options.chmodSync ?? fs.chmodSync;
+	const lstatSync = options.lstatSync ?? fs.lstatSync;
+	const mkdirSync = options.mkdirSync ?? fs.mkdirSync;
+	const warn = options.warn ?? ((message: string) => console.warn(message));
+	const getuid =
+		options.getuid ??
+		(() => {
+			try {
+				return typeof process.getuid === "function" ? process.getuid() : undefined;
+			} catch {
+				return undefined;
+			}
+		});
+	const tmpdir = options.tmpdir ?? os.tmpdir;
+	const uid = getuid();
 
-  const accessSync = options.accessSync ?? fs.accessSync;
-  const chmodSync = options.chmodSync ?? fs.chmodSync;
-  options: ResolvePreferredOpenClawTmpDirOptions = {},
-): string {
-  // Windows: Use %PROGRAMDATA%\OpenClaw\logs or %LOCALAPPDATA%\OpenClaw\logs
-  if (process.platform === "win32") {
-    const programData = process.env.PROGRAMDATA;
-    const localAppData = process.env.LOCALAPPDATA;
+	const isSecureDirForUser = (st: { mode?: number; uid?: number }): boolean => {
+		if (uid === undefined) {
+			return true;
+		}
+		if (typeof st.uid === "number" && st.uid !== uid) {
+			return false;
+		}
+		// Avoid group/other writable dirs when running on multi-user hosts.
+		if (typeof st.mode === "number" && (st.mode & 0o022) !== 0) {
+			return false;
+		}
+		return true;
+	};
 
-    // Try ProgramData first (machine-wide, requires admin for service)
-    if (programData) {
-      const openClawDir = path.join(programData, "OpenClaw", "logs");
-      try {
-        fs.mkdirSync(openClawDir, { recursive: true });
-        return openClawDir;
-      } catch {
-        // Fall through to try LocalAppData
-      }
-    }
+	const fallback = (): string => {
+		const base = tmpdir();
+		const suffix = uid === undefined ? "openclaw" : `openclaw-${uid}`;
+		return path.join(base, suffix);
+	};
 
-    // Fallback to LocalAppData (per-user, no admin required)
-    if (localAppData) {
-      const openClawDir = path.join(localAppData, "OpenClaw", "logs");
-      try {
-        fs.mkdirSync(openClawDir, { recursive: true });
-        return openClawDir;
-      } catch {
-        // Fall through to fallback
-      }
-    }
+	const isTrustedTmpDir = (st: {
+		isDirectory(): boolean;
+		isSymbolicLink(): boolean;
+		mode?: number;
+		uid?: number;
+	}): boolean => {
+		return st.isDirectory() && !st.isSymbolicLink() && isSecureDirForUser(st);
+	};
 
-    // Final fallback to temp directory
-  }
+	const resolveDirState = (candidatePath: string): "available" | "missing" | "invalid" => {
+		try {
+			const candidate = lstatSync(candidatePath);
+			if (!isTrustedTmpDir(candidate)) {
+				return "invalid";
+			}
+			accessSync(candidatePath, TMP_DIR_ACCESS_MODE);
+			return "available";
+		} catch (err) {
+			if (isNodeErrorWithCode(err, "ENOENT")) {
+				return "missing";
+			}
+			return "invalid";
+		}
+	};
 
-  const accessSync = options.accessSync ?? fs.accessSync;
-  options: ResolvePreferredOpenClawTmpDirOptions = {},
-): string {
-  const accessSync = options.accessSync ?? fs.accessSync;
-  const chmodSync = options.chmodSync ?? fs.chmodSync;
-  const lstatSync = options.lstatSync ?? fs.lstatSync;
-  const mkdirSync = options.mkdirSync ?? fs.mkdirSync;
-  const warn = options.warn ?? ((message: string) => console.warn(message));
-  const getuid =
-    options.getuid ??
-    (() => {
-      try {
-        return typeof process.getuid === "function" ? process.getuid() : undefined;
-      } catch {
-        return undefined;
-      }
-    });
-  const tmpdir = options.tmpdir ?? os.tmpdir;
-  const uid = getuid();
+	const tryRepairWritableBits = (candidatePath: string): boolean => {
+		try {
+			const st = lstatSync(candidatePath);
+			if (!st.isDirectory() || st.isSymbolicLink()) {
+				return false;
+			}
+			if (uid !== undefined && typeof st.uid === "number" && st.uid !== uid) {
+				return false;
+			}
+			if (typeof st.mode !== "number" || (st.mode & 0o022) === 0) {
+				return false;
+			}
+			chmodSync(candidatePath, 0o700);
+			warn(`[openclaw] tightened permissions on temp dir: ${candidatePath}`);
+			return resolveDirState(candidatePath) === "available";
+		} catch {
+			return false;
+		}
+	};
 
-  const isSecureDirForUser = (st: { mode?: number; uid?: number }): boolean => {
-    if (uid === undefined) {
-      return true;
-    }
-    if (typeof st.uid === "number" && st.uid !== uid) {
-      return false;
-    }
-    // Avoid group/other writable dirs when running on multi-user hosts.
-    if (typeof st.mode === "number" && (st.mode & 0o022) !== 0) {
-      return false;
-    }
-    return true;
-  };
+	const ensureTrustedFallbackDir = (): string => {
+		const fallbackPath = fallback();
+		const state = resolveDirState(fallbackPath);
+		if (state === "available") {
+			return fallbackPath;
+		}
+		if (state === "invalid") {
+			if (tryRepairWritableBits(fallbackPath)) {
+				return fallbackPath;
+			}
+			throw new Error(`Unsafe fallback OpenClaw temp dir: ${fallbackPath}`);
+		}
+		try {
+			mkdirSync(fallbackPath, { recursive: true, mode: 0o700 });
+			chmodSync(fallbackPath, 0o700);
+		} catch {
+			throw new Error(`Unable to create fallback OpenClaw temp dir: ${fallbackPath}`);
+		}
+		if (resolveDirState(fallbackPath) !== "available" && !tryRepairWritableBits(fallbackPath)) {
+			throw new Error(`Unsafe fallback OpenClaw temp dir: ${fallbackPath}`);
+		}
+		return fallbackPath;
+	};
 
-  const fallback = (): string => {
-    const base = tmpdir();
-    const suffix = uid === undefined ? "openclaw" : `openclaw-${uid}`;
-    return path.join(base, suffix);
-  };
+	const existingPreferredState = resolveDirState(POSIX_OPENCLAW_TMP_DIR);
+	if (existingPreferredState === "available") {
+		return POSIX_OPENCLAW_TMP_DIR;
+	}
+	if (existingPreferredState === "invalid") {
+		if (tryRepairWritableBits(POSIX_OPENCLAW_TMP_DIR)) {
+			return POSIX_OPENCLAW_TMP_DIR;
+		}
+		return ensureTrustedFallbackDir();
+	}
 
-  const isTrustedTmpDir = (st: {
-    isDirectory(): boolean;
-    isSymbolicLink(): boolean;
-    mode?: number;
-    uid?: number;
-  }): boolean => {
-    return st.isDirectory() && !st.isSymbolicLink() && isSecureDirForUser(st);
-  };
-
-  const resolveDirState = (candidatePath: string): "available" | "missing" | "invalid" => {
-    try {
-      const candidate = lstatSync(candidatePath);
-      if (!isTrustedTmpDir(candidate)) {
-        return "invalid";
-      }
-      accessSync(candidatePath, TMP_DIR_ACCESS_MODE);
-      return "available";
-    } catch (err) {
-      if (isNodeErrorWithCode(err, "ENOENT")) {
-        return "missing";
-      }
-      return "invalid";
-    }
-  };
-
-  const tryRepairWritableBits = (candidatePath: string): boolean => {
-    try {
-      const st = lstatSync(candidatePath);
-      if (!st.isDirectory() || st.isSymbolicLink()) {
-        return false;
-      }
-      if (uid !== undefined && typeof st.uid === "number" && st.uid !== uid) {
-        return false;
-      }
-      if (typeof st.mode !== "number" || (st.mode & 0o022) === 0) {
-        return false;
-      }
-      chmodSync(candidatePath, 0o700);
-      warn(`[openclaw] tightened permissions on temp dir: ${candidatePath}`);
-      return resolveDirState(candidatePath) === "available";
-    } catch {
-      return false;
-    }
-  };
-
-  const ensureTrustedFallbackDir = (): string => {
-    const fallbackPath = fallback();
-    const state = resolveDirState(fallbackPath);
-    if (state === "available") {
-      return fallbackPath;
-    }
-    if (state === "invalid") {
-      if (tryRepairWritableBits(fallbackPath)) {
-        return fallbackPath;
-      }
-      throw new Error(`Unsafe fallback OpenClaw temp dir: ${fallbackPath}`);
-    }
-    try {
-      mkdirSync(fallbackPath, { recursive: true, mode: 0o700 });
-      chmodSync(fallbackPath, 0o700);
-    } catch {
-      throw new Error(`Unable to create fallback OpenClaw temp dir: ${fallbackPath}`);
-    }
-    if (resolveDirState(fallbackPath) !== "available" && !tryRepairWritableBits(fallbackPath)) {
-      throw new Error(`Unsafe fallback OpenClaw temp dir: ${fallbackPath}`);
-    }
-    return fallbackPath;
-  };
-
-  const existingPreferredState = resolveDirState(POSIX_OPENCLAW_TMP_DIR);
-  if (existingPreferredState === "available") {
-    return POSIX_OPENCLAW_TMP_DIR;
-  }
-  if (existingPreferredState === "invalid") {
-    if (tryRepairWritableBits(POSIX_OPENCLAW_TMP_DIR)) {
-      return POSIX_OPENCLAW_TMP_DIR;
-    }
-    return ensureTrustedFallbackDir();
-  }
-
-  try {
-    accessSync("/tmp", TMP_DIR_ACCESS_MODE);
-    // Create with a safe default; subsequent callers expect it exists.
-    mkdirSync(POSIX_OPENCLAW_TMP_DIR, { recursive: true, mode: 0o700 });
-    chmodSync(POSIX_OPENCLAW_TMP_DIR, 0o700);
-    if (
-      resolveDirState(POSIX_OPENCLAW_TMP_DIR) !== "available" &&
-      !tryRepairWritableBits(POSIX_OPENCLAW_TMP_DIR)
-    ) {
-      return ensureTrustedFallbackDir();
-    }
-    return POSIX_OPENCLAW_TMP_DIR;
-  } catch {
-    return ensureTrustedFallbackDir();
-  }
+	try {
+		accessSync("/tmp", TMP_DIR_ACCESS_MODE);
+		// Create with a safe default; subsequent callers expect it exists.
+		mkdirSync(POSIX_OPENCLAW_TMP_DIR, { recursive: true, mode: 0o700 });
+		chmodSync(POSIX_OPENCLAW_TMP_DIR, 0o700);
+		if (
+			resolveDirState(POSIX_OPENCLAW_TMP_DIR) !== "available" &&
+			!tryRepairWritableBits(POSIX_OPENCLAW_TMP_DIR)
+		) {
+			return ensureTrustedFallbackDir();
+		}
+		return POSIX_OPENCLAW_TMP_DIR;
+	} catch {
+		return ensureTrustedFallbackDir();
+	}
 }
