@@ -65,6 +65,40 @@ export function resolvePreferredOpenClawTmpDir(
   }
 
   const accessSync = options.accessSync ?? fs.accessSync;
+  const chmodSync = options.chmodSync ?? fs.chmodSync;
+  options: ResolvePreferredOpenClawTmpDirOptions = {},
+): string {
+  // Windows: Use %PROGRAMDATA%\OpenClaw\logs or %LOCALAPPDATA%\OpenClaw\logs
+  if (process.platform === "win32") {
+    const programData = process.env.PROGRAMDATA;
+    const localAppData = process.env.LOCALAPPDATA;
+
+    // Try ProgramData first (machine-wide, requires admin for service)
+    if (programData) {
+      const openClawDir = path.join(programData, "OpenClaw", "logs");
+      try {
+        fs.mkdirSync(openClawDir, { recursive: true });
+        return openClawDir;
+      } catch {
+        // Fall through to try LocalAppData
+      }
+    }
+
+    // Fallback to LocalAppData (per-user, no admin required)
+    if (localAppData) {
+      const openClawDir = path.join(localAppData, "OpenClaw", "logs");
+      try {
+        fs.mkdirSync(openClawDir, { recursive: true });
+        return openClawDir;
+      } catch {
+        // Fall through to fallback
+      }
+    }
+
+    // Final fallback to temp directory
+  }
+
+  const accessSync = options.accessSync ?? fs.accessSync;
   options: ResolvePreferredOpenClawTmpDirOptions = {},
 ): string {
   const accessSync = options.accessSync ?? fs.accessSync;
