@@ -49,7 +49,7 @@ export async function runDaemonInstall(opts: DaemonInstallOptions) {
     return;
   }
 
-  const service = resolveGatewayService();
+  const service = resolveGatewayService({ mode: opts.mode });
   let loaded = false;
   try {
     loaded = await service.isLoaded({ env: process.env });

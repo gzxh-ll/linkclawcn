@@ -20,6 +20,19 @@ export type DaemonInstallOptions = {
   token?: string;
   force?: boolean;
   json?: boolean;
+  /**
+   * Service installation mode:
+   * - "auto" (default): Try SCM, fallback to Task Scheduler on failure
+   * - "scm": Force SCM (requires admin rights)
+   * - "user": Use Task Scheduler (no admin required)
+   */
+  mode?: "auto" | "scm" | "user";
+};
+  port?: string | number;
+  runtime?: string;
+  token?: string;
+  force?: boolean;
+  json?: boolean;
 };
 
 export type DaemonLifecycleOptions = {

@@ -77,6 +77,23 @@ export type GatewayService = {
 /**
  * Create a Windows Service manager that falls back to Task Scheduler on failure
  */
+function createWindowsServiceManager(options?: {
+  forceMode: "auto" | "scm" | "user";
+}): GatewayService {
+  // forceMode: "scm" - Always use SCM (requires admin)
+  // forceMode: "user" - Always use Task Scheduler
+  // forceMode: "auto" (default) - Try SCM, fallback to Task Scheduler
+  const forceMode = options?.forceMode ?? "auto";
+
+  // When forceMode is "user", never use SCM
+  const preferSc = forceMode !== "user";
+  // When forceMode is "scm", always use SCM
+  const requireSc = forceMode === "scm";
+
+  // Track if SCM is available
+  let scmAvailable = preferSc;
+ * Create a Windows Service manager that falls back to Task Scheduler on failure
+ */
 function createWindowsServiceManager(): GatewayService {
 	// Track if SCM is available
 	let scmAvailable = true;
@@ -201,7 +218,58 @@ function createWindowsServiceManager(): GatewayService {
 	};
 }
 
-export function resolveGatewayService(): GatewayService {
+export type ServiceInstallMode = "auto" | "scm" | "user";
+
+export function resolveGatewayService(options?: {
+  mode?: ServiceInstallMode;
+}): GatewayService {
+  const mode = options?.mode ?? "auto";
+
+  if (process.platform === "darwin") {
+    return {
+      label: "LaunchAgent",
+      loadedText: "loaded",
+      notLoadedText: "not loaded",
+      install: ignoreInstallResult(installLaunchAgent),
+      uninstall: uninstallLaunchAgent,
+      stop: stopLaunchAgent,
+      restart: restartLaunchAgent,
+      isLoaded: isLaunchAgentLoaded,
+      readCommand: readLaunchAgentProgramArguments,
+      readRuntime: readLaunchAgentRuntime,
+    };
+  }
+
+  if (process.platform === "linux") {
+    return {
+      label: "systemd",
+      loadedText: "enabled",
+      notLoadedText: "disabled",
+      install: ignoreInstallResult(installSystemdService),
+      uninstall: uninstallSystemdService,
+      stop: stopSystemdService,
+      restart: restartSystemdService,
+      isLoaded: isSystemdServiceEnabled,
+      readCommand: readSystemdServiceExecStart,
+      readRuntime: readSystemdServiceRuntime,
+    };
+  }
+
+  if (process.platform === "win32") {
+    // mode: "scm" - Force SCM (requires admin)
+    // mode: "user" - Use Task Scheduler (no admin required)
+    // mode: "auto" (default) - Try SCM, fallback to Task Scheduler
+    if (mode === "scm") {
+      return createWindowsServiceManager({ forceMode: "scm" });
+    }
+    if (mode === "user") {
+      return createWindowsServiceManager({ forceMode: "user" });
+    }
+    return createWindowsServiceManager({ forceMode: "auto" });
+  }
+
+  throw new Error(`Gateway service install not supported on ${process.platform}`);
+}
 	if (process.platform === "darwin") {
 		return {
 			label: "LaunchAgent",

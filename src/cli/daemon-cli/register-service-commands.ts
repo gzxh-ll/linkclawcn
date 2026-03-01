@@ -17,6 +17,21 @@ function resolveInstallOptions(
   const parentForce = inheritOptionFromParent<boolean>(command, "force");
   const parentPort = inheritOptionFromParent<string>(command, "port");
   const parentToken = inheritOptionFromParent<string>(command, "token");
+  const parentMode = inheritOptionFromParent<string>(command, "mode");
+  return {
+    ...cmdOpts,
+    force: Boolean(cmdOpts.force || parentForce),
+    port: cmdOpts.port ?? parentPort,
+    token: cmdOpts.token ?? parentToken,
+    mode: (cmdOpts.mode ?? parentMode) as DaemonInstallOptions["mode"],
+  };
+}
+  cmdOpts: DaemonInstallOptions,
+  command?: Command,
+): DaemonInstallOptions {
+  const parentForce = inheritOptionFromParent<boolean>(command, "force");
+  const parentPort = inheritOptionFromParent<string>(command, "port");
+  const parentToken = inheritOptionFromParent<string>(command, "token");
   return {
     ...cmdOpts,
     force: Boolean(cmdOpts.force || parentForce),
@@ -56,6 +71,21 @@ export function addGatewayServiceCommands(parent: Command, opts?: { statusDescri
     });
 
   parent
+    .command("install")
+    .description("Install the Gateway service (launchd/systemd/schtasks)")
+    .option("--port <port>", "Gateway port")
+    .option("--runtime <runtime>", "Daemon runtime (node|bun). Default: node")
+    .option("--token <token>", "Gateway token (token auth)")
+    .option("--force", "Reinstall/overwrite if already installed", false)
+    .option(
+      "--mode <mode>",
+      'Service mode: auto (default), scm (requires admin), user (Task Scheduler)',
+      "auto",
+    )
+    .option("--json", "Output JSON", false)
+    .action(async (cmdOpts, command) => {
+      await runDaemonInstall(resolveInstallOptions(cmdOpts, command));
+    });
     .command("install")
     .description("Install the Gateway service (launchd/systemd/schtasks)")
     .option("--port <port>", "Gateway port")
