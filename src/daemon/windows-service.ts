@@ -16,18 +16,14 @@ import {
 	resolveGatewayServiceDescription,
 } from "./constants.js";
 import { resolveGatewayStateDir, resolveWindowsLogDir } from "./paths.js";
-	GATEWAY_WINDOWS_SERVICE_NAME,
-	resolveGatewayServiceDescription,
-} from "./constants.js";
-import { resolveGatewayStateDir } from "./paths.js";
 import type {
 	GatewayServiceCommandConfig,
 	GatewayServiceControlArgs,
 	GatewayServiceEnvArgs,
 	GatewayServiceInstallArgs,
 	GatewayServiceManageArgs,
-	GatewayServiceRuntime,
 } from "./service-types.js";
+import type { GatewayServiceRuntime } from "./service-runtime.js";
 import { formatLine } from "./output.js";
 
 // ============================================================================
@@ -60,74 +56,19 @@ function resolveLogDirectory(env: Record<string, string | undefined>): string {
 
 	return logDir;
 }
- * Resolve log directory based on service installation type
- */
-function resolveLogDirectory(env: Record<string, string | undefined>): string {
-	// Check if running in user mode (non-admin)
-	const isUserMode = !checkAdminPrivileges();
-
-	let logDir: string;
-	if (isUserMode) {
-		// User mode: %LOCALAPPDATA%\OpenClaw\logs
-		const localAppData = env.LOCALAPPDATA || process.env.LOCALAPPDATA;
-		if (localAppData) {
-			logDir = path.join(localAppData, "OpenClaw", "logs");
-		} else {
-			logDir = path.join(resolveGatewayStateDir(env), "logs");
-		}
-	} else {
-		// Machine mode: %PROGRAMDATA%\OpenClaw\logs
-		const programData = env.PROGRAMDATA || process.env.PROGRAMDATA;
-		if (programData) {
-			logDir = path.join(programData, "OpenClaw", "logs");
-		} else {
-			logDir = path.join(resolveGatewayStateDir(env), "logs");
-		}
-	}
-
-	// Ensure log directory exists
-	try {
-		fs.mkdirSync(logDir, { recursive: true });
-	} catch {
-		// Fallback to state dir
-		logDir = path.join(resolveGatewayStateDir(env), "logs");
-		fs.mkdirSync(logDir, { recursive: true });
-	}
-
-	return logDir;
-}
 
 /**
  * Resolve the openclaw executable path
  * Uses the current Node.js process path
  */
 function resolveOpenClawBinaryPath(): string {
-	// Use the current node executable
 	return process.execPath;
-}
-
-/**
- * Resolve the openclaw CLI entry point
- */
-function resolveOpenClawEntry(): string {
-	// Try to find the CLI entry point
-	// For npm global install, use the package bin
-	// For development, use the source entry
-	const stateDir = resolveGatewayStateDir(process.env as Record<string, string | undefined>);
-	const distEntry = path.join(stateDir, "dist", "src", "index.js");
-
-	if (fs.existsSync(distEntry)) {
-		return distEntry;
-	}
-
-	// Fallback: assume openclaw is in PATH
-	return "openclaw";
 }
 
 /**
  * Check if running with administrator privileges
  */
-function checkAdminPrivileges(): boolean {
+export function checkAdminPrivileges(): boolean {
 	try {
 		execSync("net session", { stdio: "ignore", windowsHide: true });
 		return true;
@@ -137,7 +78,7 @@ function checkAdminPrivileges(): boolean {
 }
 
 /**
- * Execute sc.exe command
+ * Execute sc.exe command with proper error handling
  */
 function execSc(args: string[]): { code: number; stdout: string; stderr: string } {
 	try {
@@ -146,11 +87,12 @@ function execSc(args: string[]): { code: number; stdout: string; stderr: string 
 			windowsHide: true,
 		});
 		return { code: 0, stdout: stdout || "", stderr: "" };
-	} catch (error: any) {
+	} catch (error: unknown) {
+		const err = error as { status?: number; stdout?: string; message?: string };
 		return {
-			code: error.status ?? 1,
-			stdout: error.stdout ?? "",
-			stderr: error.message ?? "",
+			code: err.status ?? 1,
+			stdout: err.stdout ?? "",
+			stderr: err.message ?? "",
 		};
 	}
 }
@@ -167,7 +109,6 @@ function buildServiceCommand(args: GatewayServiceInstallArgs): {
 	const logPath = path.join(logDir, "gateway.log");
 
 	// Build command with log redirection
-	// Use cmd /c to ensure proper redirection
 	const gatewayArgs = args.programArguments.filter((a) => !a.match(/^--?port$/));
 	const portArg = args.programArguments.find((a) => a.match(/^--?port$/))
 		? ""
@@ -201,7 +142,8 @@ ${envSet}cd /d "${args.workingDirectory || stateDir}"
 }
 
 /**
- * Get service status using sc.exe query
+ * Get service status using sc.exe queryex
+ * Returns running state and PID
  */
 function queryService(serviceName: string): {
 	running: boolean;
@@ -228,13 +170,8 @@ function queryService(serviceName: string): {
 	const pid = pidMatch ? parseInt(pidMatch[1], 10) : undefined;
 
 	// Windows service state codes:
-	// 1 = STOPPED
-	// 2 = START_PENDING
-	// 3 = STOP_PENDING
-	// 4 = RUNNING
-	// 5 = PAUSED
-	// 6 = PAUSE_PENDING
-	// 7 = CONTINUE_PENDING
+	// 1 = STOPPED, 2 = START_PENDING, 3 = STOP_PENDING
+	// 4 = RUNNING, 5 = PAUSED, 6 = PAUSE_PENDING, 7 = CONTINUE_PENDING
 	return {
 		running: state === 4,
 		paused: state === 5,
@@ -244,9 +181,12 @@ function queryService(serviceName: string): {
 }
 
 // ============================================================================
-// Public API
+// Public API - GatewayService Interface
 // ============================================================================
 
+/**
+ * Install Windows Service using native SCM (sc.exe)
+ */
 export async function installWindowsService({
 	env,
 	stdout,
@@ -264,15 +204,6 @@ export async function installWindowsService({
 				"Run PowerShell as Administrator and try again.\n" +
 				"\n" +
 				"Alternatively, use Task Scheduler (no admin required):\n" +
-				"  openclaw service install --mode user",
-		);
-	}
-	if (!checkAdminPrivileges()) {
-		throw new Error(
-			"Administrator privileges required for Windows Service.\n" +
-				"Run PowerShell as Administrator and try again.\n" +
-				"\n" +
-				"Alternatively, use Task Scheduler fallback:\n" +
 				"  openclaw service install --mode user",
 		);
 	}
@@ -330,13 +261,13 @@ export async function installWindowsService({
 	const startResult = execSc(["start", serviceName]);
 
 	if (startResult.code !== 0) {
-		stdout.write(
+		stdout?.write(
 			`${formatLine("Warning", "Service created but failed to start automatically")}\n`,
 		);
 	}
 
-	stdout.write(
-		`${formatLine("Installed Windows Service", serviceName)}\n` +
+	stdout?.write(
+		`${formatLine("Installed Windows Service (SCM)", serviceName)}\n` +
 			`${formatLine("Display Name", SERVICE_DISPLAY_NAME)}\n` +
 			`${formatLine("Binary", binaryPath)}\n` +
 			`${formatLine("Log File", logPath)}\n`,
@@ -345,6 +276,9 @@ export async function installWindowsService({
 	return { binPath: binaryPath };
 }
 
+/**
+ * Uninstall Windows Service
+ */
 export async function uninstallWindowsService({
 	env,
 	stdout,
@@ -355,7 +289,7 @@ export async function uninstallWindowsService({
 	const status = queryService(serviceName);
 
 	if (!status.running && !status.paused && !status.stopped) {
-		stdout.write(`Service "${serviceName}" not found\n`);
+		stdout?.write(`Service "${serviceName}" not found\n`);
 		return;
 	}
 
@@ -373,9 +307,12 @@ export async function uninstallWindowsService({
 		);
 	}
 
-	stdout.write(`${formatLine("Removed Windows Service", serviceName)}\n`);
+	stdout?.write(`${formatLine("Removed Windows Service (SCM)", serviceName)}\n`);
 }
 
+/**
+ * Start Windows Service
+ */
 export async function startWindowsService({
 	stdout,
 }: GatewayServiceControlArgs): Promise<void> {
@@ -391,9 +328,12 @@ export async function startWindowsService({
 		throw new Error(`Failed to start service: ${detail}`);
 	}
 
-	stdout.write(`${formatLine("Started Windows Service", serviceName)}\n`);
+	stdout?.write(`${formatLine("Started Windows Service (SCM)", serviceName)}\n`);
 }
 
+/**
+ * Stop Windows Service
+ */
 export async function stopWindowsService({
 	stdout,
 }: GatewayServiceControlArgs): Promise<void> {
@@ -409,25 +349,31 @@ export async function stopWindowsService({
 		// Check if already stopped
 		const status = queryService(serviceName);
 		if (status.stopped) {
-			stdout.write(`${formatLine("Service already stopped", serviceName)}\n`);
+			stdout?.write(`${formatLine("Service already stopped", serviceName)}\n`);
 			return;
 		}
 		throw new Error(`Failed to stop service: ${detail}`);
 	}
 
-	stdout.write(`${formatLine("Stopped Windows Service", serviceName)}\n`);
+	stdout?.write(`${formatLine("Stopped Windows Service (SCM)", serviceName)}\n`);
 }
 
+/**
+ * Restart Windows Service
+ */
 export async function restartWindowsService(
 	args: GatewayServiceControlArgs,
 ): Promise<void> {
 	await stopWindowsService(args);
 	await startWindowsService(args);
-	args.stdout.write(
-		`${formatLine("Restarted Windows Service", GATEWAY_WINDOWS_SERVICE_NAME)}\n`,
+	args.stdout?.write(
+		`${formatLine("Restarted Windows Service (SCM)", GATEWAY_WINDOWS_SERVICE_NAME)}\n`,
 	);
 }
 
+/**
+ * Check if Windows Service is installed
+ */
 export async function isWindowsServiceInstalled(
 	_args: GatewayServiceEnvArgs,
 ): Promise<boolean> {
@@ -436,6 +382,9 @@ export async function isWindowsServiceInstalled(
 	return result.code === 0;
 }
 
+/**
+ * Read Windows Service command configuration
+ */
 export async function readWindowsServiceCommand(
 	_args: GatewayServiceEnvArgs,
 ): Promise<GatewayServiceCommandConfig | null> {
@@ -479,6 +428,9 @@ export async function readWindowsServiceCommand(
 	};
 }
 
+/**
+ * Read Windows Service runtime status
+ */
 export async function readWindowsServiceRuntime(
 	_args: GatewayServiceEnvArgs,
 ): Promise<GatewayServiceRuntime> {
@@ -495,7 +447,7 @@ export async function readWindowsServiceRuntime(
 		};
 	}
 
-	// Get additional info
+	// Get additional info from sc.exe query
 	const result = execSc(["query", serviceName]);
 
 	let detail = "";

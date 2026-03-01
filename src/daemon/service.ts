@@ -1,4 +1,14 @@
 import {
+	installWinSwService,
+	isWinSwServiceInstalled,
+	readWinSwServiceCommand,
+	readWinSwServiceRuntime,
+	restartWinSwService,
+	startWinSwService,
+	stopWinSwService,
+	uninstallWinSwService,
+} from "./winsw.js";
+import {
 	installLaunchAgent,
 	isLaunchAgentLoaded,
 	readLaunchAgentProgramArguments,
@@ -75,201 +85,216 @@ export type GatewayService = {
 };
 
 /**
- * Create a Windows Service manager that falls back to Task Scheduler on failure
+ * Create a Windows Service manager
+ * Supports multiple backends: WinSW, native SCM (sc.exe), Task Scheduler
  */
 function createWindowsServiceManager(options?: {
-  forceMode: "auto" | "scm" | "user";
+	forceMode: "auto" | "winsw" | "scm" | "user";
 }): GatewayService {
-  // forceMode: "scm" - Always use SCM (requires admin)
-  // forceMode: "user" - Always use Task Scheduler
-  // forceMode: "auto" (default) - Try SCM, fallback to Task Scheduler
-  const forceMode = options?.forceMode ?? "auto";
+	// forceMode: "winsw" - Use WinSW (requires admin)
+	// forceMode: "scm" - Use native SCM (sc.exe), no WinSW
+	// forceMode: "user" - Use Task Scheduler (no admin required)
+	// forceMode: "auto" (default) - Try WinSW, fallback to Task Scheduler
+	const forceMode = options?.forceMode ?? "auto";
 
-  // When forceMode is "user", never use SCM
-  const preferSc = forceMode !== "user";
-  // When forceMode is "scm", always use SCM
-  const requireSc = forceMode === "scm";
+	// Determine which backend to use
+	const useWinSw = forceMode === "winsw" || (forceMode === "auto");
+	const useSc = forceMode === "scm";
+	const useSchtasks = forceMode === "user" || forceMode === "auto";
 
-  // Track if SCM is available
-  let scmAvailable = preferSc;
- * Create a Windows Service manager that falls back to Task Scheduler on failure
- */
-function createWindowsServiceManager(): GatewayService {
-	// Track if SCM is available
-	let scmAvailable = true;
+	// Label based on mode
+	let label = "Windows Service";
+	if (forceMode === "winsw") label = "Windows Service (WinSW)";
+	else if (forceMode === "scm") label = "Windows Service (SCM)";
+	else if (forceMode === "user") label = "Windows Service (Task Scheduler)";
 
-	const tryInstallScm = async (args: GatewayServiceInstallArgs): Promise<{ binPath?: string }> => {
-		if (!scmAvailable) {
-			throw new Error("SCM not available, falling back to Task Scheduler");
-		}
-		try {
-			return await installWindowsService(args);
-		} catch (err) {
-			const errorMsg = String(err);
-			// Check if it's an admin/permission error
-			if (/administrator|access denied|permission denied/i.test(errorMsg)) {
-				scmAvailable = false;
-				throw new Error(
-					"Administrator privileges required for SCM. Run PowerShell as Administrator or use Task Scheduler fallback.",
+	// Install function with fallback
+	const doInstall = async (args: GatewayServiceInstallArgs): Promise<void> => {
+		// Try WinSW first (if enabled)
+		if (useWinSw) {
+			try {
+				await installWinSwService(args);
+				return;
+			} catch (err) {
+				const errorMsg = String(err);
+				// If admin error, don't fallback - user needs to fix permissions
+				if (/administrator|access denied|permission denied/i.test(errorMsg)) {
+					throw err;
+				}
+				// For other errors, try next backend
+				args.stdout?.write(
+					`WinSW install failed: ${errorMsg}\nTrying native SCM...\n`,
 				);
 			}
-			// For other errors, also fallback to schtasks
-			scmAvailable = false;
-			throw err;
+		}
+
+		// Try native SCM (sc.exe)
+		if (useSc || (forceMode === "auto" && useWinSw)) {
+			try {
+				await installWindowsService(args);
+				return;
+			} catch (err) {
+				const errorMsg = String(err);
+				if (/administrator|access denied|permission denied/i.test(errorMsg)) {
+					throw err;
+				}
+				args.stdout?.write(
+					`SCM install failed: ${errorMsg}\nTrying Task Scheduler...\n`,
+				);
+			}
+		}
+
+		// Fallback to Task Scheduler
+		if (useSchtasks) {
+			await installScheduledTask(args);
+			return;
+		}
+
+		throw new Error("No available Windows service backend");
+	};
+
+	// Uninstall function
+	const doUninstall = async (args: GatewayServiceManageArgs): Promise<void> => {
+		if (useWinSw) {
+			try {
+				await uninstallWinSwService(args);
+				return;
+			} catch {
+				// Ignore
+			}
+		}
+		if (useSc) {
+			try {
+				await uninstallWindowsService(args);
+				return;
+			} catch {
+				// Ignore
+			}
+		}
+		if (useSchtasks) {
+			await uninstallScheduledTask(args);
 		}
 	};
 
-	const tryInstallSchtasks = async (
-		args: GatewayServiceInstallArgs,
-	): Promise<{ scriptPath: string }> => {
-		return await installScheduledTask(args) as { scriptPath: string };
+	// Stop function
+	const doStop = async (args: GatewayServiceControlArgs): Promise<void> => {
+		if (useWinSw) {
+			try {
+				await stopWinSwService(args);
+				return;
+			} catch {
+				// Ignore
+			}
+		}
+		if (useSc) {
+			try {
+				await stopWindowsService(args);
+				return;
+			} catch {
+				// Ignore
+			}
+		}
+		if (useSchtasks) {
+			await stopScheduledTask(args);
+		}
+	};
+
+	// Restart function
+	const doRestart = async (args: GatewayServiceControlArgs): Promise<void> => {
+		if (useWinSw) {
+			try {
+				await restartWinSwService(args);
+				return;
+			} catch {
+				// Ignore
+			}
+		}
+		if (useSc) {
+			try {
+				await restartWindowsService(args);
+				return;
+			} catch {
+				// Ignore
+			}
+		}
+		if (useSchtasks) {
+			await restartScheduledTask(args);
+		}
+	};
+
+	// isLoaded function
+	const doIsLoaded = async (args: GatewayServiceEnvArgs): Promise<boolean> => {
+		if (useWinSw) {
+			const installed = await isWinSwServiceInstalled(args);
+			if (installed) return true;
+		}
+		if (useSc) {
+			const installed = await isWindowsServiceInstalled(args);
+			if (installed) return true;
+		}
+		if (useSchtasks) {
+			return await isScheduledTaskInstalled(args);
+		}
+		return false;
+	};
+
+	// readCommand function
+	const doReadCommand = async (env: GatewayServiceEnv) => {
+		if (useWinSw) {
+			const cmd = await readWinSwServiceCommand(env);
+			if (cmd) return cmd;
+		}
+		if (useSc) {
+			const cmd = await readWindowsServiceCommand(env);
+			if (cmd) return cmd;
+		}
+		if (useSchtasks) {
+			return await readScheduledTaskCommand(env);
+		}
+		return null;
+	};
+
+	// readRuntime function
+	const doReadRuntime = async (env: GatewayServiceEnv): Promise<GatewayServiceRuntime> => {
+		if (useWinSw) {
+			const runtime = await readWinSwServiceRuntime(env);
+			if (runtime.status !== "unknown" || !runtime.detail?.includes("not found")) {
+				return runtime;
+			}
+		}
+		if (useSc) {
+			const runtime = await readWindowsServiceRuntime(env);
+			if (runtime.status !== "unknown" || !runtime.detail?.includes("not found")) {
+				return runtime;
+			}
+		}
+		if (useSchtasks) {
+			return await readScheduledTaskRuntime(env);
+		}
+		return { status: "unknown", detail: "No service backend available" };
 	};
 
 	return {
-		label: "Windows Service",
+		label,
 		loadedText: "running",
 		notLoadedText: "not installed",
-		install: ignoreInstallResult(async (args) => {
-			// Try SCM first
-			if (scmAvailable) {
-				try {
-					await tryInstallScm(args);
-					return;
-				} catch (err) {
-					const errorMsg = String(err);
-					// If admin error, don't fallback - user needs to fix permissions
-					if (/administrator|access denied|permission denied/i.test(errorMsg)) {
-						throw err;
-					}
-					// For other errors, try schtasks fallback
-					args.stdout?.write(
-						`SCM install failed: ${errorMsg}\nFalling back to Task Scheduler...\n`,
-					);
-				}
-			}
-			// Fallback to Task Scheduler
-			await tryInstallSchtasks(args);
-		}),
-		uninstall: async (args) => {
-			// Try SCM first, then schtasks
-			if (scmAvailable) {
-				try {
-					await uninstallWindowsService(args);
-					return;
-				} catch {
-					// Ignore SCM uninstall errors, try schtasks
-				}
-			}
-			await uninstallScheduledTask(args);
-		},
-		stop: async (args) => {
-			if (scmAvailable) {
-				try {
-					await stopWindowsService(args);
-					return;
-				} catch {
-					// Ignore
-				}
-			}
-			await stopScheduledTask(args);
-		},
-		restart: async (args) => {
-			if (scmAvailable) {
-				try {
-					await restartWindowsService(args);
-					return;
-				} catch {
-					// Ignore
-				}
-			}
-			await restartScheduledTask(args);
-		},
-		isLoaded: async (args) => {
-			// Check SCM first
-			if (scmAvailable) {
-				const scmInstalled = await isWindowsServiceInstalled(args);
-				if (scmInstalled) {
-					return true;
-				}
-			}
-			// Fallback to schtasks
-			return await isScheduledTaskInstalled(args);
-		},
-		readCommand: async (env) => {
-			if (scmAvailable) {
-				const scmCmd = await readWindowsServiceCommand(env);
-				if (scmCmd) {
-					return scmCmd;
-				}
-			}
-			return await readScheduledTaskCommand(env);
-		},
-		readRuntime: async (env) => {
-			if (scmAvailable) {
-				const scmRuntime = await readWindowsServiceRuntime(env);
-				// If service is found in SCM, return it
-				if (scmRuntime.status !== "unknown" || !scmRuntime.detail?.includes("not found")) {
-					return scmRuntime;
-				}
-			}
-			// Fallback to schtasks
-			return await readScheduledTaskRuntime(env);
-		},
+		install: ignoreInstallResult(doInstall),
+		uninstall: doUninstall,
+		stop: doStop,
+		restart: doRestart,
+		isLoaded: doIsLoaded,
+		readCommand: doReadCommand,
+		readRuntime: doReadRuntime,
 	};
 }
 
-export type ServiceInstallMode = "auto" | "scm" | "user";
+export type ServiceInstallMode = "auto" | "winsw" | "scm" | "user";
 
 export function resolveGatewayService(options?: {
-  mode?: ServiceInstallMode;
+	mode?: ServiceInstallMode;
 }): GatewayService {
-  const mode = options?.mode ?? "auto";
+	const mode = options?.mode ?? "auto";
 
-  if (process.platform === "darwin") {
-    return {
-      label: "LaunchAgent",
-      loadedText: "loaded",
-      notLoadedText: "not loaded",
-      install: ignoreInstallResult(installLaunchAgent),
-      uninstall: uninstallLaunchAgent,
-      stop: stopLaunchAgent,
-      restart: restartLaunchAgent,
-      isLoaded: isLaunchAgentLoaded,
-      readCommand: readLaunchAgentProgramArguments,
-      readRuntime: readLaunchAgentRuntime,
-    };
-  }
-
-  if (process.platform === "linux") {
-    return {
-      label: "systemd",
-      loadedText: "enabled",
-      notLoadedText: "disabled",
-      install: ignoreInstallResult(installSystemdService),
-      uninstall: uninstallSystemdService,
-      stop: stopSystemdService,
-      restart: restartSystemdService,
-      isLoaded: isSystemdServiceEnabled,
-      readCommand: readSystemdServiceExecStart,
-      readRuntime: readSystemdServiceRuntime,
-    };
-  }
-
-  if (process.platform === "win32") {
-    // mode: "scm" - Force SCM (requires admin)
-    // mode: "user" - Use Task Scheduler (no admin required)
-    // mode: "auto" (default) - Try SCM, fallback to Task Scheduler
-    if (mode === "scm") {
-      return createWindowsServiceManager({ forceMode: "scm" });
-    }
-    if (mode === "user") {
-      return createWindowsServiceManager({ forceMode: "user" });
-    }
-    return createWindowsServiceManager({ forceMode: "auto" });
-  }
-
-  throw new Error(`Gateway service install not supported on ${process.platform}`);
-}
 	if (process.platform === "darwin") {
 		return {
 			label: "LaunchAgent",
@@ -301,8 +326,20 @@ export function resolveGatewayService(options?: {
 	}
 
 	if (process.platform === "win32") {
-		// Use Windows SCM Service (preferred) with Task Scheduler fallback
-		return createWindowsServiceManager();
+		// mode: "winsw" - Force WinSW (requires admin)
+		// mode: "scm" - Force native SCM (sc.exe)
+		// mode: "user" - Use Task Scheduler (no admin required)
+		// mode: "auto" (default) - Try WinSW -> SCM -> Task Scheduler
+		if (mode === "winsw") {
+			return createWindowsServiceManager({ forceMode: "winsw" });
+		}
+		if (mode === "scm") {
+			return createWindowsServiceManager({ forceMode: "scm" });
+		}
+		if (mode === "user") {
+			return createWindowsServiceManager({ forceMode: "user" });
+		}
+		return createWindowsServiceManager({ forceMode: "auto" });
 	}
 
 	throw new Error(`Gateway service install not supported on ${process.platform}`);
