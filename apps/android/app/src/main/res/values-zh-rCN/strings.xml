@@ -1,0 +1,128 @@
+<resources>
+    <!-- 应用名称 -->
+    <string name="app_name">LinkClawCN 节点</string>
+    
+    <!-- 引导流程 -->
+    <string name="onboarding_welcome">欢迎使用 LinkClawCN</string>
+    <string name="onboarding_step1_title">连接 Gateway</string>
+    <string name="onboarding_step1_desc">将您的设备连接到 LinkClawCN Gateway</string>
+    <string name="onboarding_step2_title">配置设置</string>
+    <string name="onboarding_step2_desc">自定义您的体验</string>
+    <string name="onboarding_step3_title">权限设置</string>
+    <string name="onboarding_step3_desc">授予必要权限以启用全部功能</string>
+    <string name="onboarding_step4_title">完成!</string>
+    <string name="onboarding_step4_desc">您已准备就绪</string>
+    <string name="onboarding_next">下一步</string>
+    <string name="onboarding_skip">跳过</string>
+    <string name="onboarding_get_started">开始使用</string>
+    
+    <!-- 连接页面 -->
+    <string name="connect_tab">连接</string>
+    <string name="connect_setup_code"> Setup 码</string>
+    <string name="connect_manual">手动输入</string>
+    <string name="connect_host">主机地址</string>
+    <string name="connect_port">端口</string>
+    <string name="connect_tls">使用 TLS</string>
+    <string name="connect_connect">连接</string>
+    <string name="connect_disconnect">断开</string>
+    <string name="connect_status_connected">已连接</string>
+    <string name="connect_status_disconnected">未连接</string>
+    <string name="connect_status_connecting">连接中…</string>
+    <string name="connect_error">连接错误</string>
+    <string name="connect_scan_qr">扫描二维码</string>
+    <string name="connect_enter_code">输入 Setup 码</string>
+    
+    <!-- 聊天页面 -->
+    <string name="chat_tab">聊天</string>
+    <string name="chat_placeholder">输入消息…</string>
+    <string name="chat_send">发送</string>
+    <string name="chat_no_messages">暂无消息</string>
+    <string name="chat_select_session">选择会话</string>
+    <string name="chat_filter_all">全部</string>
+    <string name="chat_filter_unread">未读</string>
+    
+    <!-- 语音页面 -->
+    <string name="voice_tab">语音</string>
+    <string name="voice_wake_mode">唤醒模式</string>
+    <string name="voice_talk_mode">对话模式</string>
+    <string name="voice_listening">正在听…</string>
+    <string name="voice_processing">处理中…</string>
+    <string name="voice_tap_to_speak">点击说话</string>
+    <string name="voice_wake_word">唤醒词</string>
+    
+    <!-- 屏幕页面 -->
+    <string name="screen_tab">屏幕</string>
+    <string name="screen_share">共享屏幕</string>
+    <string name="screen_stop">停止共享</string>
+    <string name="screen_casting">正在投射…</string>
+    <string name="screen_placeholder">屏幕内容将显示在这里</string>
+    
+    <!-- 设置页面 -->
+    <string name="settings_tab">设置</string>
+    <string name="settings_gateway">Gateway 设置</string>
+    <string name="settings_connection">连接设置</string>
+    <string name="settings_notifications">通知</string>
+    <string name="settings_voice">语音设置</string>
+    <string name="settings_appearance">外观</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_version">版本</string>
+    <string name="settings_logout">退出登录</string>
+    <string name="settings_reset">重置应用</string>
+    <string name="settings_language">语言</string>
+    <string name="settings_theme">主题</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_theme_system">跟随系统</string>
+    
+    <!-- 权限 -->
+    <string name="permission_camera">相机权限</string>
+    <string name="permission_camera_desc">用于拍照和扫描二维码</string>
+    <string name="permission_microphone">麦克风权限</string>
+    <string name="permission_microphone_desc">用于语音对话</string>
+    <string name="permission_location">位置权限</string>
+    <string name="permission_location_desc">用于发现附近的 Gateway</string>
+    <string name="permission_notification">通知权限</string>
+    <string name="permission_notification_desc">用于接收消息通知</string>
+    <string name="permission_storage">存储权限</string>
+    <string name="permission_storage_desc">用于保存和读取文件</string>
+    <string name="permission_grant">授予权限</string>
+    <string name="permission_denied">权限被拒绝</string>
+    <string name="permission_required">需要权限才能继续</string>
+    
+    <!-- 错误消息 -->
+    <string name="error_network">网络错误</string>
+    <string name="error_connection_failed">连接失败</string>
+    <string name="error_timeout">连接超时</string>
+    <string name="error_invalid_url">无效的 URL</string>
+    <string name="error_invalid_port">无效的端口</string>
+    <string name="error_pairing_failed">配对失败</string>
+    <string name="error_unauthorized">未授权</string>
+    <string name="error_server_error">服务器错误</string>
+    <string name="error_unknown">未知错误</string>
+    <string name="error_retry">重试</string>
+    <string name="error_ok">确定</string>
+    <string name="error_cancel">取消</string>
+    
+    <!-- 通知 -->
+    <string name="notification_channel_name">LinkClawCN 通知</string>
+    <string name="notification_channel_desc">接收来自 LinkClawCN 的消息通知</string>
+    <string name="notification_new_message">新消息</string>
+    <string name="notification_pairing_request">配对请求</string>
+    
+    <!-- 其他 -->
+    <string name="loading">加载中…</string>
+    <string name="refresh">刷新</string>
+    <string name="save">保存</string>
+    <string name="delete">删除</string>
+    <string name="edit">编辑</string>
+    <string name="copy">复制</string>
+    <string name="share">分享</string>
+    <string name="close">关闭</string>
+    <string name="back">返回</string>
+    <string name="done">完成</string>
+    <string name="search">搜索</string>
+    <string name="no_results">无结果</string>
+    <string name="confirm">确认</string>
+    <string name="yes">是</string>
+    <string name="no">否</string>
+</resources>

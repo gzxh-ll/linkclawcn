@@ -7,6 +7,10 @@ plugins {
 }
 
 android {
+  namespace = "ai.linkclawcn.android"
+  compileSdk = 36
+  namespace = "ai.linkclawcn.android"
+  compileSdk = 36
   namespace = "ai.openclaw.android"
   compileSdk = 36
 
@@ -16,7 +20,8 @@ android {
     }
   }
 
-  defaultConfig {
+defaultConfig {
+    applicationId = "ai.linkclawcn.android"
     applicationId = "ai.openclaw.android"
     minSdk = 31
     targetSdk = 36
